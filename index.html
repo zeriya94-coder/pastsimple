@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Past Simple: Movie Studio Battle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Bangers&display=swap');
+
+        :root {
+            --comic-yellow: #FFDE00;
+            --comic-blue: #00C2FF;
+            --comic-red: #FF3366;
+            --comic-pink: #FF99CC;
+            --comic-green: #00E676;
+        }
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: var(--comic-blue);
+            background-image: radial-gradient(circle, #ffffff33 2px, transparent 2px);
+            background-size: 20px 20px;
+            overflow: hidden; /* STRICTLY NO SCROLLING */
+            user-select: none;
+            touch-action: pan-y;
+        }
+
+        .font-comic { font-family: 'Bangers', cursive; letter-spacing: 2px; }
+        
+        .comic-box {
+            background: white;
+            border: 4px solid black;
+            border-radius: 16px;
+            box-shadow: 8px 8px 0px 0px rgba(0,0,0,1);
+            transition: all 0.1s ease-in-out;
+        }
+        
+        .comic-btn {
+            background: var(--comic-yellow);
+            border: 4px solid black;
+            border-radius: 12px;
+            box-shadow: 6px 6px 0px 0px rgba(0,0,0,1);
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        
+        .comic-btn:active {
+            transform: translate(4px, 4px);
+            box-shadow: 2px 2px 0px 0px rgba(0,0,0,1);
+        }
+        .comic-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 6px 6px 0px 0px rgba(0,0,0,1);
+        }
+
+        .comic-btn-red { background: var(--comic-red); color: white; }
+        .comic-btn-blue { background: var(--comic-blue); color: black; }
+        .comic-btn-green { background: var(--comic-green); color: black; }
+
+        @keyframes pulse-urgent {
+            0%, 100% { transform: scale(1); color: black; }
+            50% { transform: scale(1.2); color: var(--comic-red); }
+        }
+        .urgent-time { animation: pulse-urgent 0.5s infinite; }
+
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        @keyframes starburst {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(10deg) scale(1.1); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+        .boss-bg {
+            background: radial-gradient(circle, var(--comic-yellow) 20%, var(--comic-red) 100%);
+            animation: starburst 4s infinite linear;
+        }
+
+        /* Puzzle Tap Targets */
+        .puzzle-word {
+            display: inline-block;
+            padding: 12px 24px;
+            margin: 6px;
+            background: white;
+            border: 4px solid black;
+            border-radius: 8px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 4px 4px 0px black;
+        }
+        .puzzle-word:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px black; }
+
+        input[type="text"], textarea { border: 4px solid black; box-shadow: 4px 4px 0px black; }
+        input[type="text"]:focus, textarea:focus { outline: none; background: #fffde7; }
+        
+        /* Utility for strictly keeping things in bounds */
+        .strict-flex-container { display: flex; flex-direction: column; height: 100%; min-h: 0; }
+        .strict-flex-content { flex: 1; min-h: 0; overflow-y: auto; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col text-gray-900">
+
+    <div id="app" class="h-full w-full flex flex-col relative">
+        <!-- Screens injected here -->
+    </div>
+
+    <div id="modal-container" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div id="modal-content" class="comic-box p-8 max-w-3xl w-full text-center animate-pop bg-white relative flex flex-col max-h-[90vh]">
+            <h2 id="modal-title" class="font-comic text-6xl mb-4"></h2>
+            <div id="modal-body" class="text-4xl font-bold mb-6 overflow-y-auto min-h-0 flex-1"></div>
+            <div id="modal-rule" class="hidden bg-yellow-200 border-4 border-black p-4 rounded-xl text-3xl font-bold mb-6 text-red-600">
+                ⚠️ REMEMBER: After DID or DIDN'T, always use the BASE VERB!
+            </div>
+            <button id="modal-btn" class="comic-btn text-3xl py-4 px-8 w-full max-w-md mx-auto mt-4">CONTINUE</button>
+            <div id="modal-boss-stars" class="hidden absolute -top-8 -left-8 text-8xl">⭐</div>
+            <div id="modal-boss-stars-2" class="hidden absolute -bottom-8 -right-8 text-8xl">⭐</div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            screen: 'START', // START, PLAYERS, TEAMS, GAME, END
+            players: [],
+            teams: [],
+            numTeams: 2,
+            activeQuestions: [],
+            currentQIndex: 0,
+            currentTeamIndex: 0,
+            timer: null,
+            timeLeft: 20,
+            typingAttempts: 0,
+            puzzleSelectedWords: [],
+            puzzlePoolWords: [],
+            isReadingPassage: false
+        };
+
+        // EXACTLY 100 QUESTIONS
+        const questionBank = [
+            // --- 20 MCQ ---
+            { type: 'mcq', qType: 'QUICK PICK', text: "Yesterday, Amir ______ football.", options: ["play", "played", "playing"], correct: "played" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "Which question is correct?", options: ["Did she watched TV?", "Did she watch TV?", "Does she watched TV?"], correct: "Did she watch TV?" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "They ______ to the cinema last night.", options: ["go", "went", "going"], correct: "went" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "My mother ______ a delicious cake for my birthday.", options: ["bakes", "baked", "bake"], correct: "baked" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "Sarah ______ the movie last night.", options: ["didn't watch", "didn't watched", "doesn't watch"], correct: "didn't watch" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "______ did you go last weekend?", options: ["Where", "Did", "Was"], correct: "Where" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "We ______ to the park because it rained.", options: ["didn't go", "didn't went", "don't go"], correct: "didn't go" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "______ you play badminton yesterday?", options: ["Did", "Do", "Were"], correct: "Did" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "What ______ she buy at the shop?", options: ["does", "do", "did"], correct: "did" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "I ______ my keys under the sofa.", options: ["finding", "finded", "found"], correct: "found" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "Which sentence is correct?", options: ["He didn't ate the pizza.", "He didn't eat the pizza.", "He don't ate the pizza."], correct: "He didn't eat the pizza." },
+            { type: 'mcq', qType: 'QUICK PICK', text: "They ______ a beautiful song.", options: ["sang", "singed", "sing"], correct: "sang" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "______ did you watch at the cinema?", options: ["What", "When", "Who"], correct: "What" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "Who ______ you go with?", options: ["did", "do", "were"], correct: "did" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "We ______ our homework on Sunday.", options: ["didn't finish", "didn't finished", "didn't finishes"], correct: "didn't finish" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "The cat ______ the milk.", options: ["drank", "drinked", "drinks"], correct: "drank" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "Why ______ she cry?", options: ["do", "is", "did"], correct: "did" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "I ______ a big monkey at the zoo.", options: ["see", "saw", "seed"], correct: "saw" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "Which question is correct?", options: ["What did he bought?", "What did he buy?", "What do he buy?"], correct: "What did he buy?" },
+            { type: 'mcq', qType: 'QUICK PICK', text: "She ______ a new bicycle last week.", options: ["buys", "bought", "buyed"], correct: "bought" },
+
+            // --- 15 FILL IN THE BLANK ---
+            { type: 'fill', qType: 'FILL THE GAP', text: "She ______ to the cinema yesterday.\n(go)", correct: "went" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "They ______ football because it rained.\n(not play)", correct: "didn't play" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "Where ______ you go yesterday?", correct: "did" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "What did she ______ at the shop?\n(buy)", correct: "buy" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "I ______ a scary story last night.\n(read)", correct: "read" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "He ______ his grandmother on Sunday.\n(visit)", correct: "visited" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "______ they win the match?", correct: "Did" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "We didn't ______ in the sea.\n(swim)", correct: "swim" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "My dad ______ lots of photos.\n(take)", correct: "took" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "______ did you wake up late?\n(Reason)", correct: "Why" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "He ______ a letter to his friend.\n(write)", correct: "wrote" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "They didn't ______ the museum.\n(like)", correct: "like" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "What time did the train ______?\n(arrive)", correct: "arrive" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "She ______ her homework before dinner.\n(finish)", correct: "finished" },
+            { type: 'fill', qType: 'FILL THE GAP', text: "I ______ very happy yesterday.\n(be)", correct: "was" },
+
+            // --- 15 FIX THE SCRIPT ---
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: Where did Adam went yesterday?", correct: "Where did Adam go yesterday?" },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: Did Sarah watched the movie?", correct: "Did Sarah watch the movie?" },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: They didn't played badminton.", correct: "They didn't play badminton." },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: What did you ate for lunch?", correct: "What did you eat for lunch?" },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: We go to the beach last weekend.", correct: "We went to the beach last weekend." },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: He didn't bought the shoes.", correct: "He didn't buy the shoes." },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: Does you finish the book yesterday?", correct: "Did you finish the book yesterday?" },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: I seed my friend at the mall.", correct: "I saw my friend at the mall." },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: She flyed a kite in the park.", correct: "She flew a kite in the park." },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: Why did he cried?", correct: "Why did he cry?" },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: They didn't went home.", correct: "They didn't go home." },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: Who did you talked to?", correct: "Who did you talk to?" },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: The dog runned away.", correct: "The dog ran away." },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: Did they visited the zoo?", correct: "Did they visit the zoo?" },
+            { type: 'fix', qType: 'FIX THE SCRIPT', text: "ERROR: What did she found?", correct: "What did she find?" },
+
+            // --- 15 SENTENCE PUZZLE ---
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["did", "you", "what", "watch", "?"], correctStr: "What did you watch ?" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["go", "where", "she", "did", "?"], correctStr: "Where did she go ?" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["yesterday", "football", "played", "Amir"], correctStr: "Amir played football yesterday" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["didn't", "school", "go", "they", "to"], correctStr: "They didn't go to school" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["bought", "new", "Ali", "a", "bag"], correctStr: "Ali bought a new bag" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["we", "didn't", "milk", "drink", "the"], correctStr: "We didn't drink the milk" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["did", "enjoy", "the", "holiday", "you", "?"], correctStr: "Did you enjoy the holiday ?" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["arrive", "when", "did", "they", "?"], correctStr: "When did they arrive ?" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["I", "ran", "to", "school", "today"], correctStr: "I ran to school today" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["the", "cat", "didn't", "sleep", "here"], correctStr: "The cat didn't sleep here" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["why", "did", "up", "you", "wake", "late", "?"], correctStr: "Why did you wake up late ?" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["dad", "took", "lots", "my", "of", "photos"], correctStr: "My dad took lots of photos" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["did", "call", "anyone", "me", "?"], correctStr: "Did anyone call me ?" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["pizza", "we", "ate", "for", "dinner"], correctStr: "We ate pizza for dinner" },
+            { type: 'puzzle', qType: 'SENTENCE PUZZLE', text: "Arrange the words:", words: ["with", "who", "did", "go", "you", "?"], correctStr: "Who did you go with ?" },
+
+            // --- 15 BUILD THE QUESTION / CHANGE SENTENCE ---
+            { type: 'build', qType: 'BUILD THE QUESTION', text: "Write the question for this answer:\n\nANSWER: I went to the cinema.", correct: "Where did you go?" },
+            { type: 'build', qType: 'BUILD THE QUESTION', text: "Write the question:\n\nPrompt: Ask about watching a film yesterday.\nANSWER: Yes, I did.", correct: "Did you watch a film yesterday?" },
+            { type: 'build', qType: 'BUILD THE QUESTION', text: "Write the question:\n\nANSWER: I watched it with my brother.", correct: "Who did you watch it with?" },
+            { type: 'build', qType: 'CHANGE THE SENTENCE', text: "Change to negative:\n\nShe visited her grandmother.", correct: "She didn't visit her grandmother." },
+            { type: 'build', qType: 'CHANGE THE SENTENCE', text: "Change to a question:\n\nThey played football yesterday.", correct: "Did they play football yesterday?" },
+            { type: 'build', qType: 'CHANGE THE SENTENCE', text: "Change to negative:\n\nI ate the pizza.", correct: "I didn't eat the pizza." },
+            { type: 'build', qType: 'CHANGE THE SENTENCE', text: "Change to negative:\n\nHe liked the game.", correct: "He didn't like the game." },
+            { type: 'build', qType: 'CHANGE THE SENTENCE', text: "Change to a question:\n\nShe found a wallet.", correct: "Did she find a wallet?" },
+            { type: 'build', qType: 'BUILD THE QUESTION', text: "Write the question:\n\nANSWER: We played at the park.", correct: "Where did you play?" },
+            { type: 'build', qType: 'BUILD THE QUESTION', text: "Write the question:\n\nANSWER: I bought a new comic.", correct: "What did you buy?" },
+            { type: 'build', qType: 'BUILD THE QUESTION', text: "Write the question:\n\nANSWER: They arrived at 8 p.m.", correct: "When did they arrive?" },
+            { type: 'build', qType: 'CHANGE THE SENTENCE', text: "Change to negative:\n\nWe went to the beach.", correct: "We didn't go to the beach." },
+            { type: 'build', qType: 'CHANGE THE SENTENCE', text: "Change to a question:\n\nHe read a scary story.", correct: "Did he read a scary story?" },
+            { type: 'build', qType: 'BUILD THE QUESTION', text: "Write the question:\n\nANSWER: Because I was tired.", correct: "Why were you tired?" }, // Adjusted for A1-A2 simplicity
+            { type: 'build', qType: 'CHANGE THE SENTENCE', text: "Change to negative:\n\nThey flew a kite.", correct: "They didn't fly a kite." },
+
+            // --- 20 COMPREHENSION (5 Stories x 4 Questions) ---
+            // STORY 1: Movie Night
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "MOVIE NIGHT", passageText: "Last Saturday, Hana went to the cinema with her older brother. They watched an animated adventure film. Hana bought popcorn, but her brother chose a sandwich. The film started at 7:30 p.m. Hana enjoyed the funny parts, but her favourite scene was the final action scene. They went home at about ten o'clock.", text: "Who went with Hana?", options: ["Her sister", "Her older brother", "Her friend"], correct: "Her older brother" },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "MOVIE NIGHT", passageText: "Last Saturday, Hana went to the cinema with her older brother. They watched an animated adventure film. Hana bought popcorn, but her brother chose a sandwich. The film started at 7:30 p.m. Hana enjoyed the funny parts, but her favourite scene was the final action scene. They went home at about ten o'clock.", text: "What food did Hana choose?", options: ["Popcorn", "A sandwich", "Pizza"], correct: "Popcorn" },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "MOVIE NIGHT", passageText: "Last Saturday, Hana went to the cinema with her older brother. They watched an animated adventure film. Hana bought popcorn, but her brother chose a sandwich. The film started at 7:30 p.m. Hana enjoyed the funny parts, but her favourite scene was the final action scene. They went home at about ten o'clock.", text: "Which part did Hana like best?", options: ["The beginning", "The funny scenes", "The final action scene"], correct: "The final action scene" },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "MOVIE NIGHT", passageText: "Last Saturday, Hana went to the cinema with her older brother. They watched an animated adventure film. Hana bought popcorn, but her brother chose a sandwich. The film started at 7:30 p.m. Hana enjoyed the funny parts, but her favourite scene was the final action scene. They went home at about ten o'clock.", text: "Build a question for this answer:\n\nANSWER: At 7:30 p.m.", isTyped: true, correct: "When did the film start?" },
+
+            // STORY 2: The Game Competition
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "THE GAME COMPETITION", passageText: "On Friday, Daniel's school organised a gaming competition in the computer room. Daniel joined the racing game event with three classmates. His team practised after school for two days. They did not win the first race, but they won the second one. Daniel felt very happy because his team worked well together.", text: "Why was Daniel happy?", options: ["He bought a new computer.", "His group worked well together.", "He went home early."], correct: "His group worked well together." },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "THE GAME COMPETITION", passageText: "On Friday, Daniel's school organised a gaming competition in the computer room. Daniel joined the racing game event with three classmates. His team practised after school for two days. They did not win the first race, but they won the second one. Daniel felt very happy because his team worked well together.", text: "Change into a question:\n\nDaniel's team won the second race.", isTyped: true, correct: "Did Daniel's team win the second race?" },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "THE GAME COMPETITION", passageText: "On Friday, Daniel's school organised a gaming competition in the computer room. Daniel joined the racing game event with three classmates. His team practised after school for two days. They did not win the first race, but they won the second one. Daniel felt very happy because his team worked well together.", text: "Where was the competition?", options: ["In the hall", "In the computer room", "In the library"], correct: "In the computer room" },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "THE GAME COMPETITION", passageText: "On Friday, Daniel's school organised a gaming competition in the computer room. Daniel joined the racing game event with three classmates. His team practised after school for two days. They did not win the first race, but they won the second one. Daniel felt very happy because his team worked well together.", text: "Did they win the first race?", options: ["Yes, they did.", "No, they didn't.", "Yes, they won."], correct: "No, they didn't." },
+
+            // STORY 3: A Day at the Theme Park
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "A DAY AT THE THEME PARK", passageText: "Aiman visited a theme park with his family during the school holiday. They arrived early in the morning. First, Aiman went on a fast ride with his sister. Later, the family had lunch near the lake. Aiman wanted to ride the giant wheel, but it was closed because of heavy rain. Before they left, his father bought him a small souvenir.", text: "What stopped Aiman from riding the giant wheel?", options: ["He was tired.", "The weather was bad.", "His family went home."], correct: "The weather was bad." },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "A DAY AT THE THEME PARK", passageText: "Aiman visited a theme park with his family during the school holiday. They arrived early in the morning. First, Aiman went on a fast ride with his sister. Later, the family had lunch near the lake. Aiman wanted to ride the giant wheel, but it was closed because of heavy rain. Before they left, his father bought him a small souvenir.", text: "What did Aiman receive before going home?", isTyped: true, correct: "A souvenir." },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "A DAY AT THE THEME PARK", passageText: "Aiman visited a theme park with his family during the school holiday. They arrived early in the morning. First, Aiman went on a fast ride with his sister. Later, the family had lunch near the lake. Aiman wanted to ride the giant wheel, but it was closed because of heavy rain. Before they left, his father bought him a small souvenir.", text: "Build the question for this answer:\n\nANSWER: His father.", isTyped: true, correct: "Who bought him the souvenir?" },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "A DAY AT THE THEME PARK", passageText: "Aiman visited a theme park with his family during the school holiday. They arrived early in the morning. First, Aiman went on a fast ride with his sister. Later, the family had lunch near the lake. Aiman wanted to ride the giant wheel, but it was closed because of heavy rain. Before they left, his father bought him a small souvenir.", text: "Where did they have lunch?", options: ["In a restaurant", "Near the lake", "At home"], correct: "Near the lake" },
+
+            // STORY 4: The Science Fair
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "THE SCIENCE FAIR", passageText: "Last week, Class 5 Amanah went to a science fair. They saw a big robot that could play football. Sara and her friend, Lina, built a small volcano. It erupted with red bubbles! The teacher took a video of their project. Everyone learned a lot and had a fantastic time.", text: "What could the big robot do?", options: ["Sing a song", "Play football", "Cook food"], correct: "Play football" },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "THE SCIENCE FAIR", passageText: "Last week, Class 5 Amanah went to a science fair. They saw a big robot that could play football. Sara and her friend, Lina, built a small volcano. It erupted with red bubbles! The teacher took a video of their project. Everyone learned a lot and had a fantastic time.", text: "Who built the small volcano?", isTyped: true, correct: "Sara and Lina." },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "THE SCIENCE FAIR", passageText: "Last week, Class 5 Amanah went to a science fair. They saw a big robot that could play football. Sara and her friend, Lina, built a small volcano. It erupted with red bubbles! The teacher took a video of their project. Everyone learned a lot and had a fantastic time.", text: "Change to negative:\n\nThe teacher took a video.", isTyped: true, correct: "The teacher didn't take a video." },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "THE SCIENCE FAIR", passageText: "Last week, Class 5 Amanah went to a science fair. They saw a big robot that could play football. Sara and her friend, Lina, built a small volcano. It erupted with red bubbles! The teacher took a video of their project. Everyone learned a lot and had a fantastic time.", text: "What colour were the bubbles?", options: ["Blue", "Green", "Red"], correct: "Red" },
+
+            // STORY 5: Weekend Adventure
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "WEEKEND ADVENTURE", passageText: "On Sunday morning, Faris rode his bicycle to the park. He met his friends there. They played a game of tag. Faris ran very fast, but he didn't win. After the game, they sat under a large tree and drank some cold water. Faris went home at noon because he was hungry.", text: "How did Faris go to the park?", options: ["He walked.", "He rode his bicycle.", "He took a bus."], correct: "He rode his bicycle." },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "WEEKEND ADVENTURE", passageText: "On Sunday morning, Faris rode his bicycle to the park. He met his friends there. They played a game of tag. Faris ran very fast, but he didn't win. After the game, they sat under a large tree and drank some cold water. Faris went home at noon because he was hungry.", text: "Did Faris win the game?", options: ["Yes, he did.", "No, he didn't.", "He didn't play."], correct: "No, he didn't." },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "WEEKEND ADVENTURE", passageText: "On Sunday morning, Faris rode his bicycle to the park. He met his friends there. They played a game of tag. Faris ran very fast, but he didn't win. After the game, they sat under a large tree and drank some cold water. Faris went home at noon because he was hungry.", text: "Why did Faris go home at noon?", isTyped: true, correct: "Because he was hungry." },
+            { type: 'comp', qType: 'READ & FIND', passageTitle: "WEEKEND ADVENTURE", passageText: "On Sunday morning, Faris rode his bicycle to the park. He met his friends there. They played a game of tag. Faris ran very fast, but he didn't win. After the game, they sat under a large tree and drank some cold water. Faris went home at noon because he was hungry.", text: "Build the question for this answer:\n\nANSWER: Under a large tree.", isTyped: true, correct: "Where did they sit?" }
+        ];
+
+        function shuffleArray(array) {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        function normalizeText(text) {
+            return text.replace(/[.,/#!$%^&*;:{}=\-_`~()?'"]/g,"")
+                       .replace(/\s{2,}/g," ")
+                       .toLowerCase()
+                       .trim();
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = ''; 
+            
+            if (state.screen === 'START') renderStart(app);
+            else if (state.screen === 'PLAYERS') renderPlayerList(app);
+            else if (state.screen === 'TEAMS') renderTeamSetup(app);
+            else if (state.screen === 'GAME') renderGameUI(app);
+            else if (state.screen === 'END') renderDashboard(app);
+        }
+
+        function renderStart(app) {
+            app.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full w-full p-6 relative z-10">
+                    <div class="p-10 w-full text-center flex flex-col items-center max-w-7xl">
+                        <h1 class="font-comic text-7xl md:text-[9rem] text-black drop-shadow-[8px_8px_0_rgba(255,255,255,1)] mb-4 leading-none uppercase">
+                            Past Simple:<br><span class="text-yellow-400" style="-webkit-text-stroke: 4px black; filter: drop-shadow(4px 4px 0px black);">Movie Studio Battle</span>
+                        </h1>
+                        <div class="bg-black text-white px-8 py-3 rounded-full font-bold text-3xl md:text-5xl mb-16 transform -rotate-1 border-4 border-white shadow-[6px_6px_0_0_rgba(0,0,0,1)]">
+                            AFFIRMATIVE • NEGATIVE • QUESTIONS
+                        </div>
+                        <button onclick="goToPlayers()" class="comic-btn comic-btn-red text-6xl py-8 px-20 w-full max-w-2xl animate-pulse shadow-[12px_12px_0_0_rgba(0,0,0,1)]">
+                            LET'S GO!
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPlayerList(app) {
+            app.innerHTML = `
+                <div class="strict-flex-container p-6 items-center">
+                    <div class="comic-box p-8 w-full max-w-5xl strict-flex-container bg-white/95">
+                        <h2 class="font-comic text-6xl text-center mb-6 uppercase text-blue-600 flex-none">PLAYER LIST</h2>
+                        
+                        <div class="flex-none bg-yellow-300 border-4 border-black px-6 py-3 rounded-full font-bold text-4xl mb-6 self-center shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+                            PLAYERS ADDED: <span id="player-counter">${state.players.length}</span>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row gap-4 mb-6 flex-none">
+                            <textarea id="player-input" rows="2" class="flex-1 text-3xl p-4 rounded-xl" placeholder="Type name(s) here... Paste a list!"></textarea>
+                            <button onclick="addPlayers()" class="comic-btn comic-btn-green text-3xl px-8 py-4 whitespace-nowrap">ADD NAME</button>
+                        </div>
+
+                        <div class="flex-1 min-h-0 bg-gray-100 border-4 border-black rounded-xl p-4 overflow-y-auto mb-6" id="player-list-container">
+                            ${state.players.length === 0 ? '<div class="text-3xl text-gray-400 text-center mt-10">No players added yet.</div>' : ''}
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                ${state.players.map((p, i) => `
+                                    <div class="bg-white border-4 border-black p-3 rounded-xl flex justify-between items-center text-2xl font-bold shadow-[2px_2px_0_0_#000]">
+                                        <span class="truncate pr-2">${p}</span>
+                                        <button onclick="removePlayer(${i})" class="bg-red-500 text-white rounded-lg px-3 py-1 border-2 border-black active:transform active:translate-y-1 text-xl">X</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row justify-between gap-4 flex-none">
+                            <button onclick="clearPlayers()" class="comic-btn bg-gray-300 text-black text-3xl py-4 px-8 w-full md:w-auto">CLEAR ALL</button>
+                            <button onclick="goToTeamSetup()" class="comic-btn comic-btn-blue text-4xl py-4 px-12 w-full md:w-auto" ${state.players.length === 0 ? 'disabled' : ''}>CONTINUE</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function goToPlayers() {
+            state.screen = 'PLAYERS';
+            render();
+        }
+
+        function addPlayers() {
+            const input = document.getElementById('player-input');
+            const val = input.value.trim();
+            if(val) {
+                const names = val.split(/[\n,]+/).map(n => n.trim()).filter(n => n.length > 0);
+                state.players.push(...names);
+                input.value = '';
+                render();
+            }
+        }
+
+        function removePlayer(idx) {
+            state.players.splice(idx, 1);
+            render();
+        }
+
+        function clearPlayers() {
+            state.players = [];
+            render();
+        }
+
+        function renderTeamSetup(app) {
+            if(state.teams.length === 0) distributeTeams();
+
+            app.innerHTML = `
+                <div class="strict-flex-container p-6 items-center">
+                    <div class="comic-box p-8 w-full max-w-7xl strict-flex-container bg-white/95">
+                        <h2 class="font-comic text-5xl md:text-6xl text-center mb-6 uppercase text-blue-600 flex-none">HOW MANY TEAMS?</h2>
+                        
+                        <div class="grid grid-cols-5 md:grid-cols-10 gap-2 mb-8 flex-none">
+                            ${[1,2,3,4,5,6,7,8,9,10].map(n => `
+                                <button onclick="setNumTeams(${n})" class="comic-btn text-3xl py-3 ${state.numTeams === n ? 'bg-yellow-400 scale-110 shadow-[2px_2px_0_0_#000]' : 'bg-white opacity-80'}">${n}</button>
+                            `).join('')}
+                        </div>
+
+                        <div class="flex-1 min-h-0 bg-gray-100 border-4 border-black rounded-xl p-6 overflow-y-auto mb-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+                                ${state.teams.map(t => `
+                                    <div class="bg-white border-4 border-black rounded-xl shadow-[4px_4px_0_0_#000] flex flex-col h-full">
+                                        <div class="bg-black text-white text-center font-bold text-2xl py-2 uppercase rounded-t-lg">${t.name}</div>
+                                        <div class="p-4 flex-1">
+                                            <ul class="text-xl font-bold space-y-2">
+                                                ${t.players.map(p => `<li>• ${p}</li>`).join('')}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row justify-center gap-6 flex-none">
+                            <button onclick="distributeTeams()" class="comic-btn bg-pink-400 text-3xl py-4 px-8 w-full md:w-auto">SHUFFLE TEAMS</button>
+                            <button onclick="startGame()" class="comic-btn comic-btn-green text-4xl py-4 px-16 w-full md:w-auto animate-pulse">START BATTLE</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function goToTeamSetup() {
+            state.screen = 'TEAMS';
+            render();
+        }
+
+        function setNumTeams(n) {
+            state.numTeams = n;
+            distributeTeams();
+        }
+
+        function distributeTeams() {
+            const shuffledPlayers = shuffleArray(state.players);
+            state.teams = Array.from({ length: state.numTeams }, (_, i) => ({
+                id: i + 1, name: `TEAM ${i + 1}`, players: [], score: 0, correct: 0, wrong: 0, timeouts: 0, bossWins: 0, answered: 0
+            }));
+            
+            shuffledPlayers.forEach((p, idx) => {
+                state.teams[idx % state.numTeams].players.push(p);
+            });
+            render();
+        }
+
+        function startGame() {
+            state.activeQuestions = shuffleArray(questionBank);
+            state.currentTeamIndex = Math.floor(Math.random() * state.teams.length);
+            state.currentQIndex = 0;
+            
+            state.teams.forEach(t => { t.score = 0; t.correct = 0; t.wrong = 0; t.timeouts = 0; t.bossWins = 0; t.answered = 0; });
+            
+            state.screen = 'GAME';
+            
+            // Show starting team briefly
+            showModal(`<span class="text-blue-500">FIRST TEAM!</span>`, `Starting with:<br><br><span class="text-5xl text-yellow-500 drop-shadow-md">TEAM ${state.teams[state.currentTeamIndex].id}</span>`, "LET'S GO!", false, false, () => {
+                setupNextQuestion();
+            });
+        }
+
+        function renderGameUI(app) {
+            const isBoss = (state.currentQIndex + 1) % 5 === 0;
+            const currentTeam = state.teams[state.currentTeamIndex];
+            const q = state.activeQuestions[state.currentQIndex];
+            
+            let html = `
+                <!-- Top Header -->
+                <div class="w-full flex-none p-4 flex flex-row items-center justify-between bg-white border-b-4 border-black shadow-md z-20">
+                    <div class="bg-black text-white px-6 py-2 rounded-full font-bold text-3xl border-4 border-black">
+                        Q ${state.currentQIndex + 1} / 100
+                    </div>
+                    
+                    <div class="text-center">
+                        <span class="bg-yellow-400 border-4 border-black px-8 py-2 rounded-full text-3xl font-bold uppercase shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+                            🎙️ CURRENT TEAM: ${currentTeam.name}
+                        </span>
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <div class="relative w-24 h-24 flex items-center justify-center bg-white rounded-full border-4 border-black shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+                            <span id="timer-display" class="font-comic text-5xl">${state.timeLeft}</span>
+                        </div>
+                        <button onclick="confirmEndGame()" class="comic-btn comic-btn-red text-2xl py-3 px-6 h-full">END GAME</button>
+                    </div>
+                </div>
+
+                <!-- Scoreboard Row -->
+                <div class="w-full flex-none p-3 bg-gray-100 border-b-4 border-black flex overflow-x-auto gap-3 items-center z-10 shadow-inner">
+                    ${state.teams.map((t, idx) => `
+                        <div class="flex-none px-4 py-2 border-4 border-black rounded-xl font-bold text-2xl transition-all whitespace-nowrap
+                            ${idx === state.currentTeamIndex ? 'bg-yellow-400 scale-105 shadow-[4px_4px_0_0_#000] border-black text-black z-10' : 'bg-white opacity-70'}">
+                            ${t.name} <span class="text-yellow-500 drop-shadow-sm">⭐</span> ${t.score}
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Main Game Area (No scroll) -->
+                <div class="flex-1 w-full flex flex-col p-6 overflow-hidden relative ${isBoss ? 'boss-bg' : ''}">
+                    
+                    ${isBoss ? `<div class="font-comic text-6xl text-center text-yellow-400 drop-shadow-[0_4px_4px_rgba(0,0,0,1)] animate-pulse flex-none mb-4" style="-webkit-text-stroke: 2px black;">🏆 BOSS QUESTION 🏆 (+20 PTS)</div>` : ''}
+                    
+                    <div class="comic-box p-8 w-full max-w-6xl mx-auto flex-1 flex flex-col shadow-[12px_12px_0_0_rgba(0,0,0,1)] z-10 min-h-0">
+                        <div class="text-2xl md:text-3xl font-bold text-blue-600 mb-4 uppercase tracking-wide flex-none text-center bg-blue-100 p-2 rounded-xl border-4 border-blue-400 inline-block self-center">
+                            🎬 ${q.qType}
+                        </div>
+                        
+                        <div class="flex-1 min-h-0 flex flex-col justify-center w-full" id="interaction-area">
+                            ${generateInteractionHTML(q)}
+                        </div>
+                    </div>
+                </div>
+            `;
+            app.innerHTML = html;
+
+            if (q.type === 'puzzle' && !state.isReadingPassage) renderPuzzleWords();
+        }
+
+        function generateInteractionHTML(q) {
+            if (q.type === 'comp' && state.isReadingPassage) {
+                return `
+                    <div class="flex flex-col h-full w-full justify-between items-center">
+                        <h3 class="text-5xl font-comic text-red-600 mb-4 flex-none">${q.passageTitle}</h3>
+                        <div class="text-3xl md:text-4xl font-bold mb-8 leading-relaxed text-left bg-gray-50 p-6 rounded-2xl border-4 border-dashed border-gray-400 flex-1 overflow-y-auto w-full">
+                            ${q.passageText}
+                        </div>
+                        <button onclick="startCompQuestion()" class="comic-btn comic-btn-green text-4xl py-6 px-16 w-full max-w-xl flex-none animate-pulse">READY FOR QUESTION</button>
+                    </div>
+                `;
+            }
+
+            let html = `<div class="font-bold text-4xl md:text-5xl mb-8 leading-normal text-center whitespace-pre-wrap flex-none w-full px-4">${q.text}</div>`;
+            
+            if (q.type === 'mcq' || (q.type === 'comp' && q.options)) {
+                html += `
+                    <div class="grid grid-cols-1 gap-6 w-full flex-1 min-h-0 content-center px-4">
+                        ${q.options.map((opt, i) => `
+                            <button onclick="handleMCQ('${opt.replace(/'/g, "\\'")}')" class="comic-btn bg-white hover:bg-gray-100 text-left text-3xl md:text-4xl p-6 w-full flex items-center justify-start border-4 border-black">
+                                <span class="bg-black text-white rounded-full w-14 h-14 flex items-center justify-center mr-6 flex-none font-comic text-3xl">${['A','B','C'][i]}</span> 
+                                <span class="leading-tight">${opt}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+            } else if (q.type === 'puzzle') {
+                html += `
+                    <div class="flex flex-col flex-1 min-h-0 w-full px-4 justify-center">
+                        <div class="bg-gray-100 border-4 border-dashed border-gray-400 p-6 rounded-2xl min-h-[160px] flex flex-wrap content-start items-start gap-3 mb-6 shadow-inner" id="puzzle-answer-box">
+                            <!-- Answer words -->
+                        </div>
+                        <div class="bg-yellow-100 border-4 border-black p-6 rounded-2xl min-h-[160px] flex flex-wrap content-start items-start gap-3 flex-1 mb-6 shadow-[inset_0_4px_6px_rgba(0,0,0,0.1)]" id="puzzle-pool-box">
+                            <!-- Pool words -->
+                        </div>
+                        <div class="flex space-x-6 flex-none">
+                            <button onclick="resetPuzzle()" class="comic-btn bg-red-400 text-3xl py-5 px-8 w-1/3">RESET</button>
+                            <button onclick="checkPuzzle()" class="comic-btn bg-green-400 text-3xl py-5 px-8 w-2/3">CHECK ANSWER</button>
+                        </div>
+                    </div>
+                `;
+            } else if (q.type === 'fill' || q.type === 'fix' || q.type === 'build' || (q.type === 'comp' && q.isTyped)) {
+                html += `
+                    <div class="flex flex-col flex-1 min-h-0 w-full justify-center items-center px-4 space-y-8">
+                        <input type="text" id="type-input" class="w-full max-w-4xl text-center text-5xl p-8 rounded-2xl border-4 border-black shadow-[6px_6px_0_0_#000]" placeholder="Type answer here..." autocomplete="off">
+                        <div id="type-hint" class="text-3xl font-bold text-red-600 hidden bg-red-100 p-4 border-4 border-red-500 rounded-xl w-full max-w-4xl text-center"></div>
+                        <button onclick="checkType()" class="comic-btn bg-green-400 text-4xl py-6 px-16 w-full max-w-xl">SUBMIT ANSWER</button>
+                    </div>
+                `;
+            }
+            return html;
+        }
+
+        function setupNextQuestion() {
+            const q = state.activeQuestions[state.currentQIndex];
+            state.timeLeft = 20; // STRICT 20 SECONDS
+            state.typingAttempts = 0;
+            
+            if (q.type === 'comp') {
+                state.isReadingPassage = true;
+                // Don't start timer during reading
+                render();
+            } else {
+                state.isReadingPassage = false;
+                if (q.type === 'puzzle') {
+                    state.puzzlePoolWords = [...q.words];
+                    state.puzzleSelectedWords = [];
+                }
+                render();
+                
+                if (q.type === 'fill' || q.type === 'fix' || q.type === 'build') {
+                    setTimeout(() => {
+                        const input = document.getElementById('type-input');
+                        if(input) {
+                            input.focus();
+                            input.addEventListener('keypress', function(e) { if(e.key === 'Enter') checkType(); });
+                        }
+                    }, 100);
+                }
+                startTimer();
+            }
+        }
+
+        function startCompQuestion() {
+            state.isReadingPassage = false;
+            render();
+            setTimeout(() => {
+                const input = document.getElementById('type-input');
+                if(input) {
+                    input.focus();
+                    input.addEventListener('keypress', function(e) { if(e.key === 'Enter') checkType(); });
+                }
+            }, 100);
+            startTimer();
+        }
+
+        function startTimer() {
+            clearInterval(state.timer);
+            updateTimerDisplay();
+            
+            state.timer = setInterval(() => {
+                state.timeLeft--;
+                updateTimerDisplay();
+                
+                if (state.timeLeft <= 0) {
+                    clearInterval(state.timer);
+                    handleTimeout();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const tDisplay = document.getElementById('timer-display');
+            if(tDisplay) {
+                tDisplay.innerText = state.timeLeft;
+                if (state.timeLeft <= 5 && state.timeLeft > 0) {
+                    tDisplay.classList.add('urgent-time');
+                } else {
+                    tDisplay.classList.remove('urgent-time');
+                }
+            }
+        }
+
+        function handleMCQ(selectedOption) {
+            clearInterval(state.timer);
+            const q = state.activeQuestions[state.currentQIndex];
+            const isCorrect = selectedOption === q.correct;
+            processAnswer(isCorrect, selectedOption, q.correct);
+        }
+
+        function renderPuzzleWords() {
+            const poolBox = document.getElementById('puzzle-pool-box');
+            const ansBox = document.getElementById('puzzle-answer-box');
+            if(!poolBox || !ansBox) return;
+
+            poolBox.innerHTML = state.puzzlePoolWords.map((w, i) => 
+                `<span onclick="moveWord('pool', ${i})" class="puzzle-word">${w}</span>`
+            ).join('');
+
+            ansBox.innerHTML = state.puzzleSelectedWords.map((w, i) => 
+                `<span onclick="moveWord('ans', ${i})" class="puzzle-word bg-yellow-300 shadow-[inset_0_0_0_2px_#FF9800]">${w}</span>`
+            ).join('');
+        }
+
+        function moveWord(from, index) {
+            if (from === 'pool') {
+                state.puzzleSelectedWords.push(state.puzzlePoolWords[index]);
+                state.puzzlePoolWords.splice(index, 1);
+            } else {
+                state.puzzlePoolWords.push(state.puzzleSelectedWords[index]);
+                state.puzzleSelectedWords.splice(index, 1);
+            }
+            renderPuzzleWords();
+        }
+
+        function resetPuzzle() {
+            const q = state.activeQuestions[state.currentQIndex];
+            state.puzzlePoolWords = [...q.words];
+            state.puzzleSelectedWords = [];
+            renderPuzzleWords();
+        }
+
+        function checkPuzzle() {
+            clearInterval(state.timer);
+            const q = state.activeQuestions[state.currentQIndex];
+            const userAnswer = state.puzzleSelectedWords.join(' ');
+            const isCorrect = normalizeText(userAnswer) === normalizeText(q.correctStr);
+            processAnswer(isCorrect, userAnswer, q.correctStr);
+        }
+
+        function checkType() {
+            const q = state.activeQuestions[state.currentQIndex];
+            const inputEl = document.getElementById('type-input');
+            const userAnswer = inputEl.value;
+            
+            if(!userAnswer.trim()) return;
+
+            const isCorrect = normalizeText(userAnswer) === normalizeText(q.correct);
+
+            if (isCorrect) {
+                clearInterval(state.timer);
+                processAnswer(true, userAnswer, q.correct);
+            } else {
+                state.typingAttempts++;
+                if (state.typingAttempts === 1 && state.timeLeft > 2) {
+                    // Quick hint, keep timer running
+                    const hintEl = document.getElementById('type-hint');
+                    hintEl.classList.remove('hidden');
+                    hintEl.innerText = getHint(q.correct, userAnswer);
+                    inputEl.value = "";
+                    inputEl.focus();
+                } else {
+                    clearInterval(state.timer);
+                    processAnswer(false, userAnswer, q.correct);
+                }
+            }
+        }
+
+        function getHint(correct, userAns) {
+            const userNorm = normalizeText(userAns);
+            if (userNorm.includes('did') && (userNorm.includes('played') || userNorm.includes('watched') || userNorm.includes('went') || userNorm.includes('bought'))) {
+                 return "HINT: After DID, use the BASE VERB! (e.g. play, go)";
+            }
+            if (correct.toLowerCase().startsWith('w') || correct.toLowerCase().startsWith('h')) {
+                return "HINT: Start with a Wh- word! (What, Where, Who...)";
+            }
+            return "HINT: Check your spelling or past tense form!";
+        }
+
+        function checkGrammarRule(userAnswer) {
+            const badPatterns = ["did went", "did played", "did watched", "didn't went", "didn't played", "didn't watched", "did bought", "didn't bought", "did cooked"];
+            const norm = normalizeText(userAnswer);
+            return badPatterns.some(p => norm.includes(p));
+        }
+
+        function processAnswer(isCorrect, userAnswer, correctAnswer) {
+            const isBoss = (state.currentQIndex + 1) % 5 === 0;
+            const points = isBoss ? 20 : 10;
+            const team = state.teams[state.currentTeamIndex];
+            team.answered++;
+
+            let title, body, btnText;
+            const needsGrammarRule = !isCorrect && checkGrammarRule(userAnswer);
+
+            if (isCorrect) {
+                team.score += points;
+                team.correct++;
+                if (isBoss) team.bossWins++;
+                title = `<span class="text-green-500 drop-shadow-md">CORRECT!</span>`;
+                body = `<div class="text-4xl text-blue-600 mb-6">+${points} POINTS</div>
+                        <div class="text-5xl font-comic text-yellow-500 drop-shadow-[2px_2px_0_#000]">TEAM ${team.id} CONTINUES!</div>`;
+                btnText = "NEXT QUESTION";
+            } else {
+                team.wrong++;
+                title = `<span class="text-red-500 drop-shadow-md">NOT QUITE!</span>`;
+                body = `<div class="text-3xl text-gray-600 mb-4">The correct answer was:</div>
+                        <div class="text-4xl text-blue-600 bg-blue-100 p-6 rounded-2xl border-4 border-blue-500 inline-block mb-8 shadow-inner">${correctAnswer}</div>
+                        <br><div class="text-5xl font-comic text-gray-800">NEXT TEAM: TEAM ${state.teams[(state.currentTeamIndex + 1) % state.teams.length].id}</div>`;
+                btnText = "CONTINUE";
+            }
+
+            showModal(title, body, btnText, needsGrammarRule, isBoss && isCorrect, () => {
+                if (!isCorrect) {
+                    // Turn rule: Only change team if wrong or timeout
+                    state.currentTeamIndex = (state.currentTeamIndex + 1) % state.teams.length;
+                }
+                advanceGame();
+            });
+        }
+
+        function handleTimeout() {
+            const team = state.teams[state.currentTeamIndex];
+            team.timeouts++;
+            team.answered++;
+            const correctAnswer = state.activeQuestions[state.currentQIndex].correct || state.activeQuestions[state.currentQIndex].correctStr;
+            
+            const title = `<span class="text-orange-500 drop-shadow-md">TIME'S UP!</span>`;
+            const body = `<div class="text-3xl text-gray-600 mb-4">The correct answer was:</div>
+                        <div class="text-4xl text-blue-600 bg-blue-100 p-6 rounded-2xl border-4 border-blue-500 inline-block mb-8 shadow-inner">${correctAnswer}</div>
+                        <br><div class="text-5xl font-comic text-gray-800">NEXT TEAM: TEAM ${state.teams[(state.currentTeamIndex + 1) % state.teams.length].id}</div>`;
+            
+            showModal(title, body, "CONTINUE", false, false, () => {
+                // Change team on timeout
+                state.currentTeamIndex = (state.currentTeamIndex + 1) % state.teams.length;
+                advanceGame();
+            });
+        }
+
+        function advanceGame() {
+            state.currentQIndex++;
+            if (state.currentQIndex >= state.activeQuestions.length) {
+                state.screen = 'END';
+                render();
+            } else {
+                setupNextQuestion();
+            }
+        }
+
+        function confirmEndGame() {
+            clearInterval(state.timer);
+            showModal(
+                "END THE GAME?", 
+                "Are you sure you want to stop playing and see the results?", 
+                "CANCEL", 
+                false, false, 
+                () => { if(state.isReadingPassage === false) startTimer(); }, 
+                true 
+            );
+        }
+
+        function showModal(title, body, btnText, showRule, showStars, onClose, isConfirm = false) {
+            document.getElementById('modal-title').innerHTML = title;
+            document.getElementById('modal-body').innerHTML = body;
+            
+            const ruleDiv = document.getElementById('modal-rule');
+            if(showRule) ruleDiv.classList.remove('hidden');
+            else ruleDiv.classList.add('hidden');
+
+            const stars1 = document.getElementById('modal-boss-stars');
+            const stars2 = document.getElementById('modal-boss-stars-2');
+            if(showStars) {
+                stars1.classList.remove('hidden'); stars2.classList.remove('hidden');
+            } else {
+                stars1.classList.add('hidden'); stars2.classList.add('hidden');
+            }
+
+            const btn = document.getElementById('modal-btn');
+            btn.innerText = btnText;
+            btn.onclick = () => {
+                document.getElementById('modal-container').classList.add('hidden');
+                document.getElementById('modal-container').classList.remove('flex');
+                onClose();
+            };
+
+            const oldConfirmBtn = document.getElementById('modal-confirm-btn');
+            if(oldConfirmBtn) oldConfirmBtn.remove();
+
+            if (isConfirm) {
+                btn.classList.add('bg-gray-400');
+                btn.classList.remove('bg-yellow-400');
+                
+                const yesBtn = document.createElement('button');
+                yesBtn.id = 'modal-confirm-btn';
+                yesBtn.className = "comic-btn bg-red-500 text-white text-3xl py-4 px-8 w-full max-w-md mx-auto mt-4";
+                yesBtn.innerText = "YES, END GAME";
+                yesBtn.onclick = () => {
+                    document.getElementById('modal-container').classList.add('hidden');
+                    document.getElementById('modal-container').classList.remove('flex');
+                    state.screen = 'END';
+                    render();
+                };
+                document.getElementById('modal-content').appendChild(yesBtn);
+            } else {
+                btn.classList.add('bg-yellow-400');
+                btn.classList.remove('bg-gray-400');
+            }
+
+            document.getElementById('modal-container').classList.remove('hidden');
+            document.getElementById('modal-container').classList.add('flex');
+        }
+
+        function renderDashboard(app) {
+            const sortedTeams = [...state.teams].sort((a,b) => b.score - a.score);
+            const winner = sortedTeams[0];
+
+            let html = `
+                <div class="strict-flex-container p-6 items-center">
+                    <div class="comic-box p-8 w-full max-w-7xl strict-flex-container bg-white/95">
+                        <h1 class="font-comic text-6xl text-center mb-2 text-black uppercase flex-none">MOVIE STUDIO RESULTS</h1>
+                        <h2 class="text-4xl font-bold text-center text-blue-600 mb-8 flex-none">🏆 GRAMMAR MOVIE CHAMPION 🏆<br><span class="text-6xl text-yellow-500 drop-shadow-[2px_2px_0_#000]" style="-webkit-text-stroke: 2px black;">${winner.name}</span></h2>
+                        
+                        <div class="flex-1 overflow-y-auto mb-8 border-4 border-black rounded-xl bg-gray-100 min-h-0">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-black text-white font-bold text-2xl sticky top-0 z-10 shadow-md">
+                                    <tr>
+                                        <th class="p-4 border-b-4 border-black text-center w-16">RANK</th>
+                                        <th class="p-4 border-b-4 border-black">TEAM & PLAYERS</th>
+                                        <th class="p-4 border-b-4 border-black text-center text-yellow-400">SCORE</th>
+                                        <th class="p-4 border-b-4 border-black text-center text-green-400">✅</th>
+                                        <th class="p-4 border-b-4 border-black text-center text-red-400">❌</th>
+                                        <th class="p-4 border-b-4 border-black text-center text-orange-400">⏱️</th>
+                                        <th class="p-4 border-b-4 border-black text-center text-blue-300">TOTAL Q</th>
+                                        <th class="p-4 border-b-4 border-black text-center">⭐ BOSS</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-2xl font-bold">
+                                    ${sortedTeams.map((t, idx) => `
+                                        <tr class="${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} border-b-4 border-gray-300 hover:bg-yellow-50">
+                                            <td class="p-4 font-comic text-4xl text-center">${idx + 1}</td>
+                                            <td class="p-4">
+                                                <div class="text-3xl mb-1">${t.name}</div>
+                                                <div class="text-lg text-gray-500 font-normal truncate max-w-sm">${t.players.join(', ')}</div>
+                                            </td>
+                                            <td class="p-4 text-center text-4xl text-yellow-500 drop-shadow-sm" style="-webkit-text-stroke: 1px black;">${t.score}</td>
+                                            <td class="p-4 text-center text-green-600">${t.correct}</td>
+                                            <td class="p-4 text-center text-red-600">${t.wrong}</td>
+                                            <td class="p-4 text-center text-orange-500">${t.timeouts}</td>
+                                            <td class="p-4 text-center text-blue-600">${t.answered}</td>
+                                            <td class="p-4 text-center text-yellow-500 text-3xl">${t.bossWins}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row justify-center gap-6 flex-none">
+                            <button onclick="startGame()" class="comic-btn comic-btn-blue text-4xl py-5 px-12 w-full md:w-auto">PLAY AGAIN</button>
+                            <button onclick="goToPlayers()" class="comic-btn bg-gray-300 text-black text-4xl py-5 px-12 w-full md:w-auto">NEW GAME</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            app.innerHTML = html;
+        }
+
+        window.onload = () => {
+            render(); 
+        };
+    </script>
+</body>
+</html>
